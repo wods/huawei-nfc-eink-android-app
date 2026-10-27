@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 root = Path(__file__).resolve().parent
 sdk = Path(os.environ["ANDROID_HOME"])
 jdk = Path(os.environ["JAVA_HOME"])
-bt = sdk / "build-tools/34.0.0"
+bt = (sdk / "build-tools/34.0.0") if (sdk / "build-tools/34.0.0").exists() else sorted((sdk / "build-tools").iterdir())[-1]
 android = sdk / "platforms/android-34/android.jar"
 build_root = root / "build"
 build_root.mkdir(parents=True, exist_ok=True)

@@ -32,8 +32,8 @@ public final class MainActivity extends Activity {
     private PixelPreview preview;
     private ProgressBar progress;
     private Button refresh,stop;
-    private Spinner duration,fit,power,poll,blocks,panelType;
-    private CheckBox dither,binary;
+    private Spinner duration,fit,power,poll,blocks,panelType,dither;
+    private CheckBox binary;
     private SeekBar threshold;
     private Bitmap source,originalSource;
     private CropWindow appliedCrop;
@@ -147,9 +147,30 @@ public final class MainActivity extends Activity {
         for(int i=0;i<blockSizes.length;i++)if(blockSizes[i]==savedBlock)selectedBlock=i;
         blocks.setSelection(selectedBlock);
         page.addView(text("简化后每个色块使用一种颜色，自动关闭抖动；档位越强细节越少。可能改善刷新稳定性，实际效果需测试。",12,0xff68766e));
-        dither=new CheckBox(this);dither.setText("抖动处理（细碎色点更多，供电紧张时关闭）");dither.setChecked(selectedBlock==0&&getSharedPreferences("refresh-settings",MODE_PRIVATE).getBoolean("dither",false));idleControls.add(dither);page.addView(dither);
-        dither.setOnCheckedChangeListener((b,checked)->{getSharedPreferences("refresh-settings",MODE_PRIVATE).edit().putBoolean("dither",checked).apply();prepare();});
-        blocks.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p,View v,int pos,long id){getSharedPreferences("refresh-settings",MODE_PRIVATE).edit().putInt("blockSize",blockSizes[pos]).apply();if(pos>0)dither.setChecked(false);prepare();}public void onNothingSelected(AdapterView<?> p){}});
+        page.addView(text("抖动算法 · 模拟过渡色阶",14,0xff52635d));
+        dither=spinner(Dither.labels());page.addView(dither);
+        int savedDither=getSharedPreferences("refresh-settings",MODE_PRIVATE).getInt("ditherMode",-1);
+        if(savedDither<0){
+            savedDither=getSharedPreferences("refresh-settings",MODE_PRIVATE).getBoolean("dither",false)?1:0;
+        }
+        if(selectedBlock>0)savedDither=0;
+        if(savedDither>=Dither.values().length)savedDither=0;
+        dither.setSelection(savedDither);
+        dither.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
+            public void onItemSelected(AdapterView<?> p,View v,int pos,long id){
+                getSharedPreferences("refresh-settings",MODE_PRIVATE).edit().putInt("ditherMode",pos).apply();
+                prepare();
+            }
+            public void onNothingSelected(AdapterView<?> p){}
+        });
+        blocks.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
+            public void onItemSelected(AdapterView<?> p,View v,int pos,long id){
+                getSharedPreferences("refresh-settings",MODE_PRIVATE).edit().putInt("blockSize",blockSizes[pos]).apply();
+                if(pos>0)dither.setSelection(0);
+                prepare();
+            }
+            public void onNothingSelected(AdapterView<?> p){}
+        });
         panelType.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p,View v,int pos,long id){getSharedPreferences("refresh-settings",MODE_PRIVATE).edit().putString("panelType",selectedPanelType()).apply();prepare();}public void onNothingSelected(AdapterView<?> p){}});
         fit.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p,View v,int pos,long id){prepare();}public void onNothingSelected(AdapterView<?> p){}});
         page.addView(action("只读检查屏幕",v->start("identity")));
@@ -185,9 +206,13 @@ public final class MainActivity extends Activity {
     private void controls(){boolean enabled=!busy&&!preparing&&!editingCrop;for(View v:idleControls)v.setEnabled(enabled);dither.setEnabled(enabled&&blocks.getSelectedItemPosition()==0);threshold.setEnabled(enabled&&binary.isChecked());refresh.setEnabled(enabled&&prepared!=null&&!prepared.panelType.isEmpty());stop.setEnabled(busy);stop.setVisibility(busy?View.VISIBLE:View.GONE);}
     private void prepare(){
         if(source==null||busy||destroyed||editingCrop)return;
-        final int token=++revision,angle=rotation,block=blockSizes[blocks.getSelectedItemPosition()],level=threshold.getProgress();final boolean cover=fit.getSelectedItemPosition()==1,noise=dither.isChecked(),mono=binary.isChecked(),hasCrop=cropped;final Bitmap input=source;final String chosenPanel=selectedPanelType();
+        final int token=++revision,angle=rotation,block=blockSizes[blocks.getSelectedItemPosition()],level=threshold.getProgress();
+        final boolean cover=fit.getSelectedItemPosition()==1,mono=binary.isChecked(),hasCrop=cropped;
+        int ditherPos=dither.getSelectedItemPosition();
+        final Dither chosenDither=(ditherPos>=0&&ditherPos<Dither.values().length)?Dither.values()[ditherPos]:Dither.NONE;
+        final Bitmap input=source;final String chosenPanel=selectedPanelType();
         prepared=null;preparing=true;controls();imageInfo.setText("正在生成四色预览…");
-        new Thread(()->{try{PanelImage.Prepared image=PanelImage.prepare(input,angle,cover,noise,block,mono,level,hasCrop,chosenPanel);
+        new Thread(()->{try{PanelImage.Prepared image=PanelImage.prepare(input,angle,cover,chosenDither,block,mono,level,hasCrop,chosenPanel);
             main.post(()->{if(token!=revision||destroyed)return;prepared=image;preview.setImage(image.preview);imageInfo.setText(imageName+" · 552×768 · "+image.packed.length+" 字节\n"+image.settings);preparing=false;controls();});
         }catch(Throwable e){main.post(()->{if(token!=revision||destroyed)return;preparing=false;controls();imageInfo.setText("预览失败："+e.getMessage());});}},"image-preview").start();
     }

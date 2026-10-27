@@ -2,7 +2,8 @@
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 NDK=${ANDROID_NDK_HOME:?Set ANDROID_NDK_HOME to an installed Android NDK}
-CC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+PREBUILT=$(ls -d "$NDK/toolchains/llvm/prebuilt/"* | head -n 1)
+CC="$PREBUILT/bin/aarch64-linux-android26-clang"
 OUT="$ROOT/assets/native/arm64-v8a"
 mkdir -p "$OUT"
 "$CC" -std=c11 -O2 -Wall -Wextra -Werror -fPIC -fno-builtin -fvisibility=hidden -mbranch-protection=bti -mno-outline-atomics \
