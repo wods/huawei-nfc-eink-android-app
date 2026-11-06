@@ -123,6 +123,9 @@ public final class PanelImage {
         return prepare(source,rotation,cover,dither,block,binary,threshold,cropped,panelType,calibrated,chart?TestImageMode.CALIBRATION:TestImageMode.NONE,adjustments);
     }
     public static Prepared prepare(Bitmap source,int rotation,boolean cover,boolean dither,int block,boolean binary,int threshold,boolean cropped,String panelType,int[] calibrated,TestImageMode mode,ImageAdjustments adjustments) {
+        return prepare(source,rotation,cover,dither?Dither.FLOYD_STEINBERG:Dither.NONE,block,binary,threshold,cropped,panelType,calibrated,mode,adjustments);
+    }
+    public static Prepared prepare(Bitmap source,int rotation,boolean cover,Dither dither,int block,boolean binary,int threshold,boolean cropped,String panelType,int[] calibrated,TestImageMode mode,ImageAdjustments adjustments) {
         calibrated=mode.calibrationPalette(calibrated);
         if(mode.fixedRaster()){
             byte[] codes=mode.fixedCodes(552,768);PanelType type=panelType.isEmpty()?PanelType.A1:PanelType.parse(panelType);
@@ -130,7 +133,8 @@ public final class PanelImage {
             return new Prepared(Bitmap.createBitmap(type.preview(packed),552,768,Bitmap.Config.ARGB_8888),packed,
                 (mode==TestImageMode.CALIBRATION?"校色基准图 · 左上黑 / 右上白 / 左下黄 / 右下红":"纯色测试图")+" · 固定四色编码，不使用校色数据，绕过所有图片调整",panelType);
         }
-        if(block>1)dither=false;
+        if(dither==null)dither=Dither.NONE;
+        if(block>1)dither=Dither.NONE;
         Bitmap input=rotated(source,rotation);
         Bitmap fitted=Bitmap.createBitmap(552,768,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(fitted);canvas.drawColor(Color.WHITE);
         float sx=552f/input.getWidth(),sy=768f/input.getHeight(),scale=cover?Math.max(sx,sy):Math.min(sx,sy);
@@ -140,13 +144,13 @@ public final class PanelImage {
         fitted.getPixels(pixels,0,552,0,0,552,768);
         adjustments.applyTo(pixels);
         byte[] codes=calibrated==null||binary?ImageRaster.quantize(pixels,552,768,binary,threshold,dither,block)
-            :CalibratedRaster.quantize(pixels,552,768,dither,block,calibrated);
+            :CalibratedRaster.quantize(pixels,552,768,dither!=Dither.NONE,block,calibrated);
         // An unselected panel can still preview; sending requires an explicit selection.
         PanelType type=panelType.isEmpty()?PanelType.A1:PanelType.parse(panelType);
         byte[] packed=type.pack(codes);
         int[] appearance=calibrated==null?type.preview(packed):type.preview(packed,calibrated);
         Bitmap image=Bitmap.createBitmap(appearance,552,768,Bitmap.Config.ARGB_8888);
-        String settings="屏幕："+(panelType.isEmpty()?"尚未选择":panelType)+" · "+(binary?"黑白二值化 · 阈值 "+threshold:"黑白黄红四色")+" · 简化："+(block==1?"原始细节":block+"×"+block+" 色块")+" · 抖动："+(dither?"开启":"关闭")+" · "+(cropped?"已手动裁切 · ":"")+"旋转 "+rotation+"° · "+(cover?"填满":"留白");
+        String settings="屏幕："+(panelType.isEmpty()?"尚未选择":panelType)+" · "+(binary?"黑白二值化 · 阈值 "+threshold:"黑白黄红四色")+" · 简化："+(block==1?"原始细节":block+"×"+block+" 色块")+" · 抖动："+dither.label+" · "+(cropped?"已手动裁切 · ":"")+"旋转 "+rotation+"° · "+(cover?"填满":"留白");
         settings+=calibrated==null?" · 校色：关闭":" · 校色：开启（近似实物色；黑白模式仍按阈值）";
         settings+=" · "+adjustments.description();
         if(mode!=TestImageMode.NONE)settings+=" · 测试图不使用校色数据";

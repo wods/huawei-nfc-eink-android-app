@@ -15,7 +15,7 @@ public final class ShellBridge extends Binder {
  public ShellBridge()throws Exception {
   if(android.os.Process.myUid()!=0&&android.os.Process.myUid()!=2000)throw new SecurityException("Shell/root required");
   Object pm=Class.forName("android.app.ActivityThread").getMethod("getPackageManager").invoke(null);
-  ApplicationInfo info=(ApplicationInfo)Class.forName("android.content.pm.IPackageManager").getMethod("getApplicationInfo",String.class,long.class,int.class).invoke(pm,"org.nfcresearch.qpolllab",0L,0);
+  ApplicationInfo info=(ApplicationInfo)Class.forName("android.content.pm.IPackageManager").getMethod("getApplicationInfo",String.class,long.class,int.class).invoke(pm,InstalledApp.PACKAGE_NAME,0L,0);
   if(info==null)throw new IllegalStateException("App missing");appUid=info.uid;apk=info.sourceDir;
  }
  private ShellBridge(String apk,boolean legacyRoot){

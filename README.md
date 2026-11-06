@@ -270,3 +270,34 @@ adb install -r dist/QPollLab-2.17.0.apk
 ## v2.11-root-test8 原图重新裁切
 
 重复裁切始终使用完整原图，并恢复上次应用的裁切位置与缩放；取消或重置当前裁切不会改动已应用的裁切。旋转后重新打开裁切时使用相应方向的完整原图，并重置裁切窗口。
+
+## v2.17.0-dither1 多抖动算法共存增强版
+
+本版本基于上游 `v2.17.0`（Shizuku / Root NFC 交互架构重构版）构建，整合 14 种图像抖动算法，并采用独立包名实现与原版官方应用在同一台手机上并存使用。
+
+### 1. 独立包名与双 App 并存
+- **独立包名**：`org.nfcresearch.qpolllab.dither`
+- **应用名称**：`墨水屏刷新测试 (Dither)`
+- **独立 Shizuku Authority**：`org.nfcresearch.qpolllab.dither.shizuku`
+- 可与上游官方原版 `QPollLab` (`org.nfcresearch.qpolllab`) 共同安装在同一手机上，各自持有独立的 Shizuku 授权与 Shizuku 后端进程，互不冲突，方便直接对比刷新效果。
+
+### 2. 14 种专业抖动模式
+参考 [Dither Me This](https://doodad.dev/dither-me-this/) 的算法设计，将单一二值化抖动扩展为 14 种专业抖动模式下拉菜单：
+1. **经典误差扩散**：
+   - **Floyd-Steinberg**：原厂默认均衡算法，过渡平滑。
+   - **Atkinson**：经典 Mac 1984 算法，丢弃 25% 扩散误差，保留纯净高光与深邃黑阶，**反差鲜明，强烈推荐在四色墨水屏上使用**。
+   - **Burkes / Sierra-2 / Sierra-3 / Sierra Lite**：平滑自然的扩散过渡，较少出现条纹污点。
+   - **Stucki / Jarvis-Judice-Ninke (JJN)**：大扩散卷积核，呈现细腻逼真的细节还原。
+2. **有序网点抖动 (Ordered Dithering)**：
+   - **Bayer 2×2 / 4×4 / 8×8**：经典复古半色调印刷网点。像素呈现规律的聚集点阵，相比全随机细碎色点能大幅减轻墨水屏粒子频繁反转时的电流峰值，显著提升 NFC 供电紧张场景下的刷新稳定性。
+3. **噪声质感抖动**：
+   - **蓝噪声 (Blue Noise)**：基于 16×16 Void-and-Cluster 高频蓝噪声矩阵，无低频结块，具有类似胶片的颗粒质感。
+   - **随机噪点 (Random)**：白噪声随机散布，适合特种风格创作。
+4. **无抖动 (None)**：
+   - 纯色彩阈值硬切，无过渡杂点，功耗最低。
+
+### 3. 工程与兼容性优化
+- 界面“抖动算法”下拉菜单实时响应，切换后即刻在手机屏幕上刷新 552×768 四色/黑白预览。
+- 完整保留上游 v2.17.0 的校色基准图、曝光对比度调整、草稿保存、前台 Root HAL 等全新功能。
+- 自动化适配 macOS / Linux 最新的 Android SDK build-tools 与 NDK 编译工具链。
+

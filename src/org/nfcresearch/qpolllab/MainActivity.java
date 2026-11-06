@@ -42,8 +42,8 @@ public final class MainActivity extends Activity {
     private boolean powerTagActivated;
     private long powerDeadline;
     private Button rotateImage,cropImage,restoreImage;
-    private Spinner duration,fit,power,poll,blocks,panelType,charge;
-    private CheckBox dither,binary;
+    private Spinner duration,fit,power,poll,blocks,panelType,charge,dither;
+    private CheckBox binary;
     private SeekBar threshold;
     private Bitmap source,originalSource;
     private CropWindow appliedCrop;
@@ -92,8 +92,8 @@ public final class MainActivity extends Activity {
     private boolean bridgeBinding,permissionPending;
     private long bridgeBindingStarted;
     private final Runnable bridgeTimeout=()->{if(!destroyed&&bridgeBinding){bridgeBinding=false;authorizationInfo.setText("已授权，用户服务启动超时；可选择 Shizuku 进程兼容");append("Shizuku 用户服务超过 10 秒未连接；可手动切换进程兼容，不自动重试 NFC 操作。");}};
-    private final Shizuku.UserServiceArgs bridgeArgs=new Shizuku.UserServiceArgs(new android.content.ComponentName("org.nfcresearch.qpolllab","org.nfcresearch.qpolllab.ShellBridge")).tag("nfc-shell").version(33).daemon(false).processNameSuffix("nfc_shell");
-    private final Shizuku.UserServiceArgs halBridgeArgs=new Shizuku.UserServiceArgs(new android.content.ComponentName("org.nfcresearch.qpolllab","org.nfcresearch.qpolllab.RootHalBridge")).tag("nfc-foreground-hal").version(33).daemon(false).processNameSuffix("nfc_hal");
+    private final Shizuku.UserServiceArgs bridgeArgs=new Shizuku.UserServiceArgs(new android.content.ComponentName(InstalledApp.PACKAGE_NAME,"org.nfcresearch.qpolllab.ShellBridge")).tag("nfc-shell-dither").version(33).daemon(false).processNameSuffix("nfc_shell");
+    private final Shizuku.UserServiceArgs halBridgeArgs=new Shizuku.UserServiceArgs(new android.content.ComponentName(InstalledApp.PACKAGE_NAME,"org.nfcresearch.qpolllab.RootHalBridge")).tag("nfc-foreground-hal-dither").version(33).daemon(false).processNameSuffix("nfc_hal");
     private final android.content.ServiceConnection bridgeConnection=new android.content.ServiceConnection(){
         public void onServiceConnected(android.content.ComponentName name,android.os.IBinder binder){
             if(destroyed||controlLaunch()!=0||!currentBridgeName(name))return;
@@ -266,10 +266,16 @@ public final class MainActivity extends Activity {
         threshold.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar s,int value,boolean user){thresholdLabel.setText("二值化阈值："+value);}public void onStartTrackingTouch(SeekBar s){}public void onStopTrackingTouch(SeekBar s){getSharedPreferences("refresh-settings",MODE_PRIVATE).edit().putInt("threshold",s.getProgress()).apply();prepare();}});
         page.addView(text("图像简化",14,0xff52635d));blocks=spinner(new String[]{"原始细节","轻度 · 2×2 色块","中度 · 4×4 色块","强 · 8×8 色块","极强 · 16×16 色块"});page.addView(blocks);
         int savedBlock=getSharedPreferences("refresh-settings",MODE_PRIVATE).getInt("blockSize",1),selectedBlock=0;for(int i=0;i<blockSizes.length;i++)if(blockSizes[i]==savedBlock)selectedBlock=i;blocks.setSelection(selectedBlock);
-        dither=new CheckBox(this);dither.setText("抖动处理");dither.setChecked(selectedBlock==0&&getSharedPreferences("refresh-settings",MODE_PRIVATE).getBoolean("dither",false));idleControls.add(dither);page.addView(dither);
+        page.addView(text("抖动算法 · 模拟过渡色阶",14,0xff52635d));
+        dither=spinner(Dither.labels());page.addView(dither);
+        int savedDither=getSharedPreferences("refresh-settings",MODE_PRIVATE).getInt("ditherMode",-1);
+        if(savedDither<0){savedDither=getSharedPreferences("refresh-settings",MODE_PRIVATE).getBoolean("dither",false)?1:0;}
+        if(selectedBlock>0)savedDither=0;
+        if(savedDither>=Dither.values().length)savedDither=0;
+        dither.setSelection(savedDither);
         ditherHint=text("",12,0xff68766e);page.addView(ditherHint);
-        dither.setOnCheckedChangeListener((b,checked)->{getSharedPreferences("refresh-settings",MODE_PRIVATE).edit().putBoolean("dither",checked).apply();prepare();});
-        blocks.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p,View v,int pos,long id){getSharedPreferences("refresh-settings",MODE_PRIVATE).edit().putInt("blockSize",blockSizes[pos]).apply();if(pos>0)dither.setChecked(false);prepare();}public void onNothingSelected(AdapterView<?> p){}});
+        dither.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p,View v,int pos,long id){getSharedPreferences("refresh-settings",MODE_PRIVATE).edit().putInt("ditherMode",pos).apply();prepare();}public void onNothingSelected(AdapterView<?> p){}});
+        blocks.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p,View v,int pos,long id){getSharedPreferences("refresh-settings",MODE_PRIVATE).edit().putInt("blockSize",blockSizes[pos]).apply();if(pos>0)dither.setSelection(0);prepare();}public void onNothingSelected(AdapterView<?> p){}});
         panelType.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p,View v,int pos,long id){getSharedPreferences("refresh-settings",MODE_PRIVATE).edit().putString("panelType",selectedPanelType()).apply();prepare();controls();}public void onNothingSelected(AdapterView<?> p){}});
         fit.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p,View v,int pos,long id){prepare();}public void onNothingSelected(AdapterView<?> p){}});
 
@@ -573,11 +579,14 @@ public final class MainActivity extends Activity {
     }
     private void prepare(){
         if(initializing||restoringDraft||source==null||busy||destroyed||editingCrop)return;
-        final int token=++revision,angle=rotation,block=blockSizes[blocks.getSelectedItemPosition()],level=threshold.getProgress();final boolean cover=fit.getSelectedItemPosition()==1,noise=dither.isChecked(),mono=binary.isChecked(),hasCrop=cropped;final Bitmap input=source;final String chosenPanel=selectedPanelType();
+        final int token=++revision,angle=rotation,block=blockSizes[blocks.getSelectedItemPosition()],level=threshold.getProgress();final boolean cover=fit.getSelectedItemPosition()==1,mono=binary.isChecked(),hasCrop=cropped;
+        int ditherPos=dither.getSelectedItemPosition();
+        final Dither chosenDither=(ditherPos>=0&&ditherPos<Dither.values().length)?Dither.values()[ditherPos]:Dither.NONE;
+        final Bitmap input=source;final String chosenPanel=selectedPanelType();
         final int[] palette=calibration==null?null:calibration.activePalette();final TestImageMode mode=imageMode;
         final ImageAdjustments tones=adjustments==null?ImageAdjustments.NONE:adjustments.snapshot();
         prepared=null;preparing=true;controls();setImageStatus("正在生成四色预览…");
-        new Thread(()->{try{PanelImage.Prepared image=PanelImage.prepare(input,angle,cover,noise,block,mono,level,hasCrop,chosenPanel,palette,mode,tones);
+        new Thread(()->{try{PanelImage.Prepared image=PanelImage.prepare(input,angle,cover,chosenDither,block,mono,level,hasCrop,chosenPanel,palette,mode,tones);
             main.post(()->{if(token!=revision||destroyed)return;prepared=image;preview.setImage(image.preview);editPreview.setImage(image.preview);setImageStatus(imageName+" · "+(imageMode==TestImageMode.NONE?"点击查看参数":"测试图不使用校色 · 点击查看参数"));preparing=false;controls();scheduleDraft();});
         }catch(Throwable e){main.post(()->{if(token!=revision||destroyed)return;preparing=false;controls();setImageStatus("预览失败："+e.getMessage());});}},"image-preview").start();
     }

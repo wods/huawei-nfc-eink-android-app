@@ -21,7 +21,7 @@ public final class RootHalBridge extends Binder {
         if(Process.myUid()!=0&&Process.myUid()!=2000)throw new SecurityException("Shell/root required");
         Object pm=Class.forName("android.app.ActivityThread").getMethod("getPackageManager").invoke(null);
         ApplicationInfo info=(ApplicationInfo)Class.forName("android.content.pm.IPackageManager")
-                .getMethod("getApplicationInfo",String.class,long.class,int.class).invoke(pm,"org.nfcresearch.qpolllab",0L,0);
+                .getMethod("getApplicationInfo",String.class,long.class,int.class).invoke(pm,InstalledApp.PACKAGE_NAME,0L,0);
         if(info==null)throw new IOException("App missing");apk=info.sourceDir;appUid=info.uid;
     }
     private RootHalBridge(String apk){this.apk=apk;appUid=-1;stream=true;}
